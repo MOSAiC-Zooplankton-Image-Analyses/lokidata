@@ -7,19 +7,21 @@ import glob
 import subprocess
 from tqdm.auto import tqdm
 
+
 @click.group()
 def main():
     pass
 
+
 @main.command()
-@click.argument('root_dir')
-@click.option('-j', "--n_workers", type=int, default=1)
+@click.argument("root_dir")
+@click.option("-j", "--n_workers", type=int, default=1)
 @click.option("--skip-existing", is_flag=True)
 @click.option("--ignore", multiple=True)
 def compress(root_dir, n_workers, skip_existing, ignore):
     """
     Find and compress LOKI data folders.
-    
+
     LOKI data consists of very many small files which are slow to read on most filesystems.
     By compressing whole folders, into zip files, these are quicker to transfer and to read.
     """
@@ -29,10 +31,14 @@ def compress(root_dir, n_workers, skip_existing, ignore):
     print("Discovering project directories...")
     futures: List[concurrent.futures.Future] = []
     existing_archive_fns = set()
+    tasks = []
     for data_root in find_data_roots(root_dir, progress=False, ignore_patterns=ignore):
+        # Read logfile and YAML meta
         (log_fn,) = glob.glob(os.path.join(data_root, "Log", "LOKI*.log"))
-        log = read_log(log_fn)
-        sample_id = "{STATION}_{HAUL}".format_map(log)
+        yaml_meta_fn = os.path.join(data_root, "meta.yaml")
+        meta = {**read_log(log_fn, format="ecotaxa"), **read_yaml_meta(yaml_meta_fn)}
+
+        sample_id = "{sample_station}_{sample_haul}".format_map(meta)
 
         archive_fn = os.path.join(root_dir, sample_id) + ".zip"
         print(data_root, "->", archive_fn)
@@ -47,16 +53,27 @@ def compress(root_dir, n_workers, skip_existing, ignore):
             print(archive_fn, "already exists.")
             continue
 
-        future=executor.submit(subprocess.run, ["zip", "-r", archive_fn, "."], cwd=data_root, check=True, stdout=subprocess.DEVNULL)
-        future.add_done_callback(lambda _, sample_id=sample_id: print(sample_id, "finished.\n"))
+        tasks.append(
+            (
+                sample_id,
+                (subprocess.run, ["zip", "-r", archive_fn, "."]),
+                dict(cwd=data_root, check=True, stdout=subprocess.DEVNULL),
+            )
+        )
+
+    print(f"Compressing {len(tasks)} samples...")
+    for sample_id, args, kwargs in tasks:
+        future = executor.submit(*args, **kwargs)
+        future.add_done_callback(
+            lambda _, sample_id=sample_id: print(sample_id, "finished.\n")
+        )
         futures.append(future)
 
-    print("Compressing...")
     for _ in tqdm(concurrent.futures.as_completed(futures), total=len(futures)):
         pass
 
     print("All done.")
-        
+
 
 if __name__ == "__main__":
     main()

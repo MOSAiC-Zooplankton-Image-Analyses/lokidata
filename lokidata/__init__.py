@@ -1,12 +1,18 @@
 import logging
-from typing import Any, Collection, Tuple
+import pathlib
+from typing import Any, Collection, Container, Mapping, Optional, Tuple, Union
 from tqdm.auto import tqdm
 import fnmatch
 import os
 from . import _version
-__version__ = _version.get_versions()['version']
+import yaml
+
+__version__ = _version.get_versions()["version"]
 
 logger = logging.getLogger(__name__)
+
+StrOrPath = Union[str, pathlib.Path]
+
 
 def german_float(s: str):
     return float(s.replace(",", "."))
@@ -129,13 +135,19 @@ def _parse_dat_line(idx: int, line: str, fields) -> Tuple[str, Any]:
     return name, value
 
 
-def read_tmd(fn):
-    with open(fn, "r") as f:
+def read_tmd(fn: StrOrPath):
+    if isinstance(fn, str):
+        fn = pathlib.Path(fn)
+
+    with fn.open() as f:
         return dict(_parse_tmd_line(l, TMD_FIELDS) for l in f)
 
 
-def read_dat(fn):
-    with open(fn, "r") as f:
+def read_dat(fn: StrOrPath):
+    if isinstance(fn, str):
+        fn = pathlib.Path(fn)
+
+    with fn.open() as f:
         # FIXME: Sometimes, a .dat contains multiple lines.
         # Here, we only use the first one.
         contents = f.readline()
@@ -148,12 +160,53 @@ def read_dat(fn):
         if i in DAT_FIELDS
     )
 
+LOG_FIELDS_TO_ECOTAXA = {
+    "sample_date": "DATE",
+    "sample_time": "TIME",
+    "acq_instrument_name": "DEVICE",
+    "acq_instrument_serial": "LOKI",
+    "sample_cruise": "CRUISE",
+    "sample_station": "STATION",
+    "sample_station_no": "STATION_NR",
+    "sample_haul": "HAUL",
+    "sample_user": "USER",
+    "sample_vessel": "SHIP",
+    "sample_gps_src": "GPS_SRC",
+    "sample_latitude": "FIX_LAT",
+    "sample_longitude": "FIX_LON",
+}
 
-def read_log(fn):
-    with open(fn, "r") as f:
-        return dict(_parse_tmd_line(l, LOG_FIELDS) for l in f)
+def read_log(fn: StrOrPath, format="raw", remap_fields: Optional[Mapping]=None):
+    if isinstance(fn, str):
+        fn = pathlib.Path(fn)
 
-def find_data_roots(project_root, ignore_patterns: Collection | None = None, progress=True):
+    with fn.open() as f:
+        data = dict(_parse_tmd_line(l, LOG_FIELDS) for l in f)
+
+    if remap_fields is not None:
+        data = {ke: data[kl] for ke, kl in remap_fields.items()}
+    
+    return data
+
+def read_yaml(fn: StrOrPath) -> Mapping[str, Any]:
+    if isinstance(fn, str):
+        fn = pathlib.Path(fn)
+
+    if not fn.is_file():
+        return {}
+
+    with fn.open() as f:
+        value = yaml.unsafe_load(f)
+
+        if not isinstance(value, Mapping):
+            raise ValueError(f"Unexpected content in {fn}: {value}")
+
+        return value
+
+
+def find_data_roots(
+    project_root, ignore_patterns: Collection | None = None, progress=True
+):
     logger.info("Detecting project folders...")
     with tqdm(leave=False, disable=not progress) as progress_bar:
         for root, dirs, _ in os.walk(project_root):
