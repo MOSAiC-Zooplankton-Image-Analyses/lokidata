@@ -1,11 +1,14 @@
-from typing import List
-from . import find_data_roots, read_log
-import click
 import concurrent.futures
-import os.path
 import glob
+import os.path
 import subprocess
+from typing import List
+
+import click
 from tqdm.auto import tqdm
+from werkzeug.utils import secure_filename
+
+from . import LOG_FIELDS_TO_ECOTAXA, find_data_roots, read_log, read_yaml
 
 
 @click.group()
@@ -18,13 +21,17 @@ def main():
 @click.option("-j", "--n_workers", type=int, default=1)
 @click.option("--skip-existing", is_flag=True)
 @click.option("--ignore", multiple=True)
-def compress(root_dir, n_workers, skip_existing, ignore):
+@click.option("--to", "target_dir")
+def compress(root_dir, n_workers, skip_existing, ignore, target_dir):
     """
     Find and compress LOKI data folders.
 
     LOKI data consists of very many small files which are slow to read on most filesystems.
     By compressing whole folders, into zip files, these are quicker to transfer and to read.
     """
+
+    if target_dir is None:
+        target_dir = root_dir
 
     executor = concurrent.futures.ThreadPoolExecutor(n_workers)
 
@@ -36,11 +43,14 @@ def compress(root_dir, n_workers, skip_existing, ignore):
         # Read logfile and YAML meta
         (log_fn,) = glob.glob(os.path.join(data_root, "Log", "LOKI*.log"))
         yaml_meta_fn = os.path.join(data_root, "meta.yaml")
-        meta = {**read_log(log_fn, format="ecotaxa"), **read_yaml_meta(yaml_meta_fn)}
+        meta = {
+            **read_log(log_fn, remap_fields=LOG_FIELDS_TO_ECOTAXA),
+            **read_yaml(yaml_meta_fn),
+        }
 
         sample_id = "{sample_station}_{sample_haul}".format_map(meta)
 
-        archive_fn = os.path.join(root_dir, sample_id) + ".zip"
+        archive_fn = os.path.join(target_dir, secure_filename(sample_id)) + ".zip"
         print(data_root, "->", archive_fn)
 
         if archive_fn in existing_archive_fns:

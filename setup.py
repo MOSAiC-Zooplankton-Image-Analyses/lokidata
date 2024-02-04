@@ -19,6 +19,7 @@ setup(
     # include_package_data=True,
     install_requires=[
         "pyyaml",
+        "werkzeug",
     ],
     python_requires=">=3.7",
     extras_require={

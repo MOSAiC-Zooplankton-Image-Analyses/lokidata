@@ -1,6 +1,7 @@
+import datetime
 import logging
 import pathlib
-from typing import Any, Collection, Container, Mapping, Optional, Tuple, Union
+from typing import Any, Collection, Container, Dict, Mapping, Optional, Tuple, Union
 from tqdm.auto import tqdm
 import fnmatch
 import os
@@ -21,6 +22,9 @@ def german_float(s: str):
         return float(s.replace(",", "."))
     except ValueError:
         return NAN
+
+def german_date(s: str):
+    return datetime.datetime.strptime(s, "%d.%m.%Y").date()
 
 
 TMD_FIELDS = {
@@ -82,8 +86,8 @@ DAT_FIELDS = {
 }
 
 LOG_FIELDS = {
-    1: ("DATE", None),  # Startdate	UTC
-    2: ("TIME", None),  # Starttime	UTC
+    1: ("DATE", german_date),  # Startdate	UTC
+    2: ("TIME", datetime.time.fromisoformat),  # Starttime	UTC
     3: ("PICTURE#", int),  # Aktuelle Bildnummer VPR-Recorder
     4: ("DEVICE", None),  # Loki-Name
     5: ("LOKI", None),  # Loki-Serial
@@ -104,8 +108,8 @@ LOG_FIELDS = {
     20: ("TEMP_INDEX", None),  # Temperature Sensor Index for calculation
     61: ("ERROR", None),  # Any Error Message
     62: ("WAKEUP", None),  # AnyWakeUp Controller Message
-    63: ("STOP_DATE", None),  # Stopdate	UTC
-    64: ("STOP_TIME", None),  # Stoptime	UTC
+    63: ("STOP_DATE", german_date),  # Stopdate	UTC
+    64: ("STOP_TIME", datetime.time.fromisoformat),  # Stoptime	UTC
 }
 
 
@@ -195,8 +199,7 @@ def read_log(fn: StrOrPath, remap_fields: Optional[Mapping] = None):
 
     return data
 
-
-def read_yaml(fn: StrOrPath) -> Mapping[str, Any]:
+def read_yaml(fn: StrOrPath) -> Dict[str, Any]:
     if isinstance(fn, str):
         fn = pathlib.Path(fn)
 
@@ -206,7 +209,7 @@ def read_yaml(fn: StrOrPath) -> Mapping[str, Any]:
     with fn.open() as f:
         value = yaml.safe_load(f)
 
-        if not isinstance(value, Mapping):
+        if not isinstance(value, dict):
             raise ValueError(f"Unexpected content in {fn}: {value}")
 
         return value
