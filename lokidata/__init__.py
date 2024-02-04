@@ -13,9 +13,14 @@ logger = logging.getLogger(__name__)
 
 StrOrPath = Union[str, pathlib.Path]
 
+NAN = float("nan")
+
 
 def german_float(s: str):
-    return float(s.replace(",", "."))
+    try:
+        return float(s.replace(",", "."))
+    except ValueError:
+        return NAN
 
 
 TMD_FIELDS = {
@@ -160,6 +165,7 @@ def read_dat(fn: StrOrPath):
         if i in DAT_FIELDS
     )
 
+
 LOG_FIELDS_TO_ECOTAXA = {
     "sample_date": "DATE",
     "sample_time": "TIME",
@@ -176,7 +182,8 @@ LOG_FIELDS_TO_ECOTAXA = {
     "sample_longitude": "FIX_LON",
 }
 
-def read_log(fn: StrOrPath, format="raw", remap_fields: Optional[Mapping]=None):
+
+def read_log(fn: StrOrPath, remap_fields: Optional[Mapping] = None):
     if isinstance(fn, str):
         fn = pathlib.Path(fn)
 
@@ -185,8 +192,9 @@ def read_log(fn: StrOrPath, format="raw", remap_fields: Optional[Mapping]=None):
 
     if remap_fields is not None:
         data = {ke: data[kl] for ke, kl in remap_fields.items()}
-    
+
     return data
+
 
 def read_yaml(fn: StrOrPath) -> Mapping[str, Any]:
     if isinstance(fn, str):
@@ -196,7 +204,7 @@ def read_yaml(fn: StrOrPath) -> Mapping[str, Any]:
         return {}
 
     with fn.open() as f:
-        value = yaml.unsafe_load(f)
+        value = yaml.safe_load(f)
 
         if not isinstance(value, Mapping):
             raise ValueError(f"Unexpected content in {fn}: {value}")
