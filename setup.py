@@ -20,6 +20,7 @@ setup(
     install_requires=[
         "pyyaml",
         "werkzeug",
+        "exceptiongroup",
     ],
     python_requires=">=3.7",
     extras_require={

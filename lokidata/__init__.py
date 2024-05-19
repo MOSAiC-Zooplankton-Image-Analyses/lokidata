@@ -1,12 +1,34 @@
 import datetime
 import logging
 import pathlib
-from typing import Any, Collection, Container, Dict, Mapping, Optional, Tuple, Union
+from typing import (
+    Any,
+    Collection,
+    Dict,
+    Mapping,
+    Optional,
+    Tuple,
+    Union,
+)
 from tqdm.auto import tqdm
 import fnmatch
 import os
 from . import _version
 import yaml
+import chardet
+
+
+def _add_note(exc, note: str) -> None:
+    if not isinstance(note, str):
+        raise TypeError(
+            f"Expected a string, got note={note!r} (type {type(note).__name__})"
+        )
+
+    if not hasattr(exc, "__notes__"):
+        exc.__notes__ = []
+
+    exc.__notes__.append(note)
+
 
 __version__ = _version.get_versions()["version"]
 
@@ -22,6 +44,7 @@ def german_float(s: str):
         return float(s.replace(",", "."))
     except ValueError:
         return NAN
+
 
 def german_date(s: str):
     return datetime.datetime.strptime(s, "%d.%m.%Y").date()
@@ -116,16 +139,17 @@ LOG_FIELDS = {
 def _parse_tmd_line(line: str, fields) -> Tuple[str, Any]:
     try:
         idx, value = line.rstrip("\n").split(";", 1)
-    except:
-        print("Offending line:", line)
-        raise
+    except BaseException as exc:
+        _add_note(exc, f"Offending line: {line}")
+        raise exc
 
     name, converter = fields[int(idx)]
     if converter is not None:
         try:
             value = converter(value)
-        except Exception as exc:
-            raise type(exc)(*exc.args, f"Field {name}") from exc
+        except BaseException as exc:
+            _add_note(exc, f"Field {name}")
+            raise exc
 
     return name, value
 
@@ -138,8 +162,9 @@ def _parse_dat_line(idx: int, line: str, fields) -> Tuple[str, Any]:
     if converter is not None:
         try:
             value = converter(value)
-        except Exception as exc:
-            raise type(exc)(*exc.args, f"Field {name}") from exc
+        except BaseException as exc:
+            _add_note(exc, f"Field {name}")
+            raise exc
 
     return name, value
 
@@ -148,8 +173,17 @@ def read_tmd(fn: StrOrPath):
     if isinstance(fn, str):
         fn = pathlib.Path(fn)
 
-    with fn.open() as f:
-        return dict(_parse_tmd_line(l, TMD_FIELDS) for l in f)
+    for encoding in ("utf-8", "Windows-1252"):
+        try:
+            with fn.open(encoding=encoding) as f:
+                return dict(_parse_tmd_line(l, TMD_FIELDS) for l in f)
+        except UnicodeDecodeError:
+            pass
+
+    with fn.open("rb") as f:
+        detected = chardet.detect_all(f.read())
+
+    raise ValueError(f"Unexpected encoding. Guessed {detected}")
 
 
 def read_dat(fn: StrOrPath):
@@ -199,6 +233,7 @@ def read_log(fn: StrOrPath, remap_fields: Optional[Mapping] = None):
 
     return data
 
+
 def read_yaml(fn: StrOrPath) -> Dict[str, Any]:
     if isinstance(fn, str):
         fn = pathlib.Path(fn)
@@ -218,6 +253,7 @@ def read_yaml(fn: StrOrPath) -> Dict[str, Any]:
 def find_data_roots(
     project_root, ignore_patterns: Collection | None = None, progress=True
 ):
+    # TODO: Work with `Path`s
     logger.info("Detecting project folders...")
     with tqdm(leave=False, disable=not progress) as progress_bar:
         for root, dirs, _ in os.walk(project_root):
@@ -228,6 +264,7 @@ def find_data_roots(
                 if any(fnmatch.fnmatch(root, pat) for pat in ignore_patterns):
                     # Do not descend further
                     dirs[:] = []
+                    logger.info(f"Ignoring {root}.")
                     continue
 
             if "Pictures" in dirs and "Telemetrie" in dirs:
