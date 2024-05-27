@@ -254,6 +254,7 @@ def find_data_roots(
     project_root, ignore_patterns: Collection | None = None, progress=True
 ):
     # TODO: Work with `Path`s
+    # TODO: Remove tqdm as dependency (use progress_callback)
     logger.info("Detecting project folders...")
     with tqdm(leave=False, disable=not progress) as progress_bar:
         for root, dirs, _ in os.walk(project_root):

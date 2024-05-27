@@ -14,13 +14,15 @@ setup(
     description="Process data of the Lightframe Onsight Keyspecies Investigation (LOKI)",
     long_description=LONG_DESCRIPTION,
     long_description_content_type="text/markdown",
-    # url="https://github.com/ecotaxa/pyecotaxa",
+    url="https://github.com/MOSAiC-Zooplankton-Image-Analyses/lokidata",
     packages=find_packages(),
     # include_package_data=True,
     install_requires=[
         "pyyaml",
         "werkzeug",
         "exceptiongroup",
+        "tqdm",
+        "chardet",
     ],
     python_requires=">=3.7",
     extras_require={
