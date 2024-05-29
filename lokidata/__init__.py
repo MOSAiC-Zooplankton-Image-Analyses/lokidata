@@ -250,25 +250,24 @@ def read_yaml(fn: StrOrPath) -> Dict[str, Any]:
         return value
 
 
-def find_data_roots(
-    project_root, ignore_patterns: Collection | None = None, progress=True
-):
-    # TODO: Work with `Path`s
-    # TODO: Remove tqdm as dependency (use progress_callback)
-    logger.info("Detecting project folders...")
-    with tqdm(leave=False, disable=not progress) as progress_bar:
-        for root, dirs, _ in os.walk(project_root):
-            progress_bar.set_description(root, refresh=False)
-            progress_bar.update(1)
+def find_data_roots(project_root: StrOrPath, ignore_patterns: Collection | None = None):
+    if isinstance(project_root, str):
+        project_root = pathlib.Path(project_root)
 
-            if ignore_patterns is not None:
-                if any(fnmatch.fnmatch(root, pat) for pat in ignore_patterns):
-                    # Do not descend further
-                    dirs[:] = []
-                    logger.info(f"Ignoring {root}.")
-                    continue
+    logger.info(f"Checking {project_root}")
 
-            if "Pictures" in dirs and "Telemetrie" in dirs:
-                yield root
-                # Do not descend further
-                dirs[:] = []
+    if ignore_patterns is not None and any(
+        project_root.match(pat) for pat in ignore_patterns
+    ):
+        return
+
+    subdirs = [p for p in project_root.iterdir() if p.is_dir()]
+
+    if any(p.name == "Pictures" for p in subdirs) and any(
+        p.name == "Telemetrie" for p in subdirs
+    ):
+        yield project_root
+
+    else:
+        for subdir in subdirs:
+            yield from find_data_roots(subdir, ignore_patterns)
